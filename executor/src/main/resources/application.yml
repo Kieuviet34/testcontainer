@@ -1,0 +1,13 @@
+spring:
+  application:
+    name: executor
+  rabbitmq:
+    host: localhost
+    port: 5672
+    stream:
+      username: guest
+      password: guest
+api:
+  base-url: http://localhost:8080
+server:
+  port: 8081

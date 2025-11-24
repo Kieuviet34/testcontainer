@@ -1,0 +1,30 @@
+version: "3.8"
+services:
+  rabbitmq:
+    image: rabbitmq:3.11-management
+    environment:
+      RABBITMQ_DEFAULT_USER: guest
+      RABBITMQ_DEFAULT_PASS: guest
+    ports:
+      - "15672:15672"
+      - "5672:5672"
+  routing:
+    build:
+      context: ./api
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      - SPRING_RABBIT_MQ_HOST=rabbitmq
+    depends_on:
+      - rabbitmq
+  executor:
+    build:
+      context: ./executor
+      dockerfile: Dockerfile
+    depends_on:
+      - rabbitmq
+      - api
+    environment:
+      - API_URL=http://api:8080/api/callback
+      - SPRING_RABBIT_MQ_HOST=rabbitmq
