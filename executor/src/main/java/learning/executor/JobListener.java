@@ -154,6 +154,7 @@ public class JobListener {
         List<String> cmd = new ArrayList<>();
         cmd.add("docker");
         cmd.add("run");
+        cmd.add("-i");
         cmd.add("--rm");
 
         // isolation & resource flags

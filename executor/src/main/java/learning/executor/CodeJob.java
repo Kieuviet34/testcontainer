@@ -1,25 +1,29 @@
 package learning.executor;
 
-public class CodeJob {
-    public String id;
-    public String language;
-    public String code;
-    public String Stdin;
-    public String Status;
-    public String output;
-    public int exitCode;
+import java.io.Serializable;
+
+public class CodeJob implements Serializable {
+    private String id;
+    private String language;
+    private String code;
+    private String stdin;
+
+    // Các trường update trạng thái
+    private String status;
+    private String output;
+    private int exitCode;
 
     public CodeJob() {
     }
 
-    public CodeJob(String id, String language, String code, String stdin) {
+    public CodeJob(String id, String language, String code, String stdin, String status, String output, int exitCode) {
         this.id = id;
         this.language = language;
         this.code = code;
-        this.Stdin = stdin;
-        this.Status = "PENDING";
-        this.output = "";
-        this.exitCode = -1;
+        this.stdin = stdin;
+        this.status = status;
+        this.output = output;
+        this.exitCode = exitCode;
     }
 
     public String getId() {
@@ -47,19 +51,19 @@ public class CodeJob {
     }
 
     public String getStdin() {
-        return Stdin;
+        return stdin;
     }
 
     public void setStdin(String stdin) {
-        Stdin = stdin;
+        this.stdin = stdin;
     }
 
     public String getStatus() {
-        return Status;
+        return status;
     }
 
     public void setStatus(String status) {
-        Status = status;
+        this.status = status;
     }
 
     public String getOutput() {

@@ -1,151 +1,188 @@
 import React, { useState, useEffect, useRef } from "react";
 import Editor from "@monaco-editor/react";
 import axios from "axios";
-import "./style.css";
+import "./style.css"; // Nhớ import file css mới
 
 const API_BASE = process.env.REACT_APP_API_BASE || "http://localhost:8080/api";
 
 const templates = {
-  python: `print("Hello from Python")`,
-  java: `public class Main {
-    public static void main(String[] args) {
-        System.out.println("Hello from Java");
-    }
-}`,
-  c: `#include <stdio.h>
-int main() {
-    printf("Hello from C\\n");
-    return 0;
-}`,
-  cpp: `#include <iostream>
-using namespace std;
-int main() {
-    cout << "Hello from C++" << endl;
-    return 0;
-}`,
+    python: `import sys\n\n# Nhập input vào tab STDIN bên dưới\n# data = sys.stdin.read()\nprint("Hello SmartCode!")`,
+    java: `import java.util.Scanner;\n\npublic class Main {\n    public static void main(String[] args) {\n        System.out.println("Hello SmartCode Java!");\n        // Scanner scanner = new Scanner(System.in);\n    }\n}`,
+    c: `#include <stdio.h>\n\nint main() {\n    printf("Hello SmartCode C!\\n");\n    return 0;\n}`,
+    cpp: `#include <iostream>\nusing namespace std;\n\nint main() {\n    cout << "Hello SmartCode C++!" << endl;\n    return 0;\n}`,
 };
 
 export default function App() {
-  const [language, setLanguage] = useState("python");
-  const [code, setCode] = useState(templates.python);
-  const [jobId, setJobId] = useState(null);
-  const [status, setStatus] = useState(null);
-  const [output, setOutput] = useState("");
-  const [running, setRunning] = useState(false);
-  const pollRef = useRef(null);
+    const [language, setLanguage] = useState("python");
+    const [code, setCode] = useState(templates.python);
+    const [inputData, setInputData] = useState("");
+    const [output, setOutput] = useState("");
+    const [status, setStatus] = useState("IDLE");
+    const [running, setRunning] = useState(false);
+    const [activeTab, setActiveTab] = useState("input"); // 'input' | 'console'
 
-  useEffect(() => {
-    // update code template when language changes (if user hasn't edited — simple behavior)
-    setCode(templates[language] || "");
-  }, [language]);
+    const pollRef = useRef(null);
 
-  useEffect(() => {
-    return () => {
-      if (pollRef.current) clearInterval(pollRef.current);
-    };
-  }, []);
+    useEffect(() => {
+        // Chỉ reset code nếu người dùng chuyển ngôn ngữ (thực tế nên check xem code có bị sửa chưa)
+        setCode(templates[language] || "");
+    }, [language]);
 
-  const run = async () => {
-    setJobId(null);
-    setStatus("PENDING");
-    setOutput("");
-    setRunning(true);
+    useEffect(() => {
+        return () => stopPolling();
+    }, []);
 
-    try {
-      const resp = await axios.post(`${API_BASE}/run`, {
-        language,
-        code,
-        stdin: ""
-      });
-      const id = resp.data?.jobId ?? resp.data?.JobId;
-      setJobId(id);
-      setStatus("PENDING");
+    const run = async () => {
+        setStatus("PENDING");
+        setOutput("");
+        setRunning(true);
+        setActiveTab("console"); // Auto switch to console
 
-      // start polling
-      pollRef.current = setInterval(async () => {
         try {
-          const r = await axios.get(`${API_BASE}/status/${id}`);
-          const j = r.data;
-          setStatus(j.status);
-          if (j.output) setOutput(j.output);
-          if (["DONE", "ERROR", "TIMEOUT"].includes(j.status)) {
+            const payload = {
+                lang: language,
+                typed_code: code,
+                data_input: inputData
+            };
+
+            const resp = await axios.post(`${API_BASE}/intepret_solution`, payload);
+            const id = resp.data?.interpret_id;
+
+            if (!id) throw new Error("Server error: No ID returned");
+
+            pollRef.current = setInterval(async () => {
+                try {
+                    const r = await axios.get(`${API_BASE}/check/${id}`);
+                    const data = r.data;
+
+                    if (data.state === "PENDING" || data.state === "RUNNING") {
+                        setOutput((prev) => prev === "Running..." ? "Running." : "Running...");
+                    } else {
+                        setRunning(false);
+                        clearInterval(pollRef.current);
+                        pollRef.current = null;
+
+                        const finalStatus = data.status || "DONE";
+                        setStatus(finalStatus);
+
+                        let rawOutput = data.output || "";
+                        if (!rawOutput && finalStatus === "DONE") rawOutput = "(Program exited with no output)";
+
+                        setOutput(rawOutput);
+                    }
+                } catch (e) {
+                    console.error(e);
+                }
+            }, 1000);
+
+        } catch (err) {
+            setOutput("System Error: " + (err.response?.data?.error || err.message));
             setRunning(false);
+            setStatus("ERROR");
+            stopPolling();
+        }
+    };
+
+    const stopPolling = () => {
+        if (pollRef.current) {
             clearInterval(pollRef.current);
             pollRef.current = null;
-          }
-        } catch (e) {
-          console.error("poll error", e);
-          // stop polling on 404 or network error after few tries? simple stop:
-          // clearInterval(pollRef.current);
-          // pollRef.current = null;
         }
-      }, 1000);
+        setRunning(false);
+    };
 
-    } catch (err) {
-      setOutput("Run request failed: " + (err.message || err));
-      setRunning(false);
-      setStatus(null);
-    }
-  };
+    return (
+        <div className="app">
+            {/* --- HEADER --- */}
+            <header className="topbar">
+                <div className="brand">
+                    <span>⚡</span> SmartCode Console
+                </div>
+                <div className="controls">
+                    <select
+                        className="lang-select"
+                        value={language}
+                        onChange={(e) => setLanguage(e.target.value)}
+                        disabled={running}
+                    >
+                        <option value="python">Python 3</option>
+                        <option value="java">Java 17</option>
+                        <option value="c">C (GCC 12)</option>
+                        <option value="cpp">C++ (G++ 17)</option>
+                    </select>
 
-  const stopPolling = () => {
-    if (pollRef.current) {
-      clearInterval(pollRef.current);
-      pollRef.current = null;
-      setRunning(false);
-    }
-  };
+                    <button className="btn-run" onClick={run} disabled={running}>
+                        {running ? "Running..." : "▶ Run Code"}
+                    </button>
 
-  return (
-    <div className="app">
-      <header className="topbar">
-        <h1>Code Runner — Monaco</h1>
-        <div className="controls">
-          <label>
-            Language
-            <select value={language} onChange={(e) => setLanguage(e.target.value)}>
-              <option value="python">Python</option>
-              <option value="java">Java</option>
-              <option value="c">C</option>
-              <option value="cpp">C++</option>
-            </select>
-          </label>
-          <button className="run" onClick={run} disabled={running}>
-            {running ? "Running..." : "Run"}
-          </button>
-          <button className="stop" onClick={stopPolling} disabled={!pollRef.current}>
-            Stop Poll
-          </button>
+                    {running && (
+                        <button className="btn-stop" onClick={stopPolling}>Stop</button>
+                    )}
+                </div>
+            </header>
+
+            {/* --- BODY --- */}
+            <div className="main">
+                {/* 1. Editor Section (Chiếm phần trên) */}
+                <section className="editorWrap">
+                    <Editor
+                        height="100%" // Bắt buộc để Monaco fill hết cha
+                        width="100%"
+                        language={language === "cpp" ? "cpp" : language}
+                        value={code}
+                        theme="vs-dark"
+                        onChange={(val) => setCode(val)}
+                        options={{
+                            fontSize: 14,
+                            minimap: { enabled: false },
+                            scrollBeyondLastLine: false,
+                            automaticLayout: true,
+                            fontFamily: "'Consolas', 'Courier New', monospace"
+                        }}
+                    />
+                </section>
+
+                {/* 2. Console/Input Section (Chiếm phần dưới cố định) */}
+                <section className="bottomPanel">
+                    <div className="tabs">
+                        <div
+                            className={`tab ${activeTab === "input" ? "active" : ""}`}
+                            onClick={() => setActiveTab("input")}
+                        >
+                            STDIN (Input)
+                        </div>
+                        <div
+                            className={`tab ${activeTab === "console" ? "active" : ""}`}
+                            onClick={() => setActiveTab("console")}
+                        >
+                            Console Output
+                        </div>
+                    </div>
+
+                    <div className="panelContent">
+                        {activeTab === "input" && (
+                            <textarea
+                                className="inputArea"
+                                placeholder="Nhập dữ liệu đầu vào cho chương trình (nếu có)..."
+                                value={inputData}
+                                onChange={(e) => setInputData(e.target.value)}
+                                spellCheck={false}
+                            />
+                        )}
+
+                        {activeTab === "console" && (
+                            <div className={`terminal ${status === "ERROR" ? "terminal-error" : "terminal-success"}`}>
+                                {output}
+                                {status !== "PENDING" && status !== "IDLE" && (
+                                    <div className="status-line">
+                                        Process finished with status: <b>{status}</b>
+                                    </div>
+                                )}
+                            </div>
+                        )}
+                    </div>
+                </section>
+            </div>
         </div>
-      </header>
-
-      <main className="main">
-        <section className="editorWrap">
-          <Editor
-            height="60vh"
-            defaultLanguage={language}
-            language={language === "cpp" ? "cpp" : language}
-            value={code}
-            theme="vs-dark"
-            onChange={(value) => setCode(value)}
-            options={{
-              fontSize: 14,
-              minimap: { enabled: false },
-              automaticLayout: true,
-            }}
-          />
-        </section>
-
-        <section className="outputWrap">
-          <div className="meta">
-            <div>Job: <b>{jobId || "-"}</b></div>
-            <div>Status: <b>{status || "-"}</b></div>
-          </div>
-          <div className="outputBox">
-            <pre>{output || (status ? "(no output yet)" : "Press Run to start")}</pre>
-          </div>
-        </section>
-      </main>
-    </div>
-  );
+    );
 }

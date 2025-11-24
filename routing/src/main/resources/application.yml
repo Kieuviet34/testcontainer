@@ -9,8 +9,6 @@ spring:
       password: guest
   data:
     mongodb:
-      authentication-database: admin
-      database: testContainer
-      port: 27017
+      uri: mongodb+srv://kieuviet34_db_user:kieuviet2004@learningapp.jqpx9hf.mongodb.net/testContainer
 server:
   port: 8080
